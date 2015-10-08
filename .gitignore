@@ -1,0 +1,6 @@
+*_exe
+*.aux
+*.log
+*.mod
+*.o
+
