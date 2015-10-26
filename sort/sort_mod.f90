@@ -30,6 +30,10 @@ END IF
 
 CALL MergeSort(tempx,tempx_size,tempindx)
 
+!Put it all back together!
+
+
+
 
 DEALLOCATE(tempx,tempindx)
 END SUBROUTINE sort
@@ -127,8 +131,6 @@ WHILE(templ .LE. left_size) DO
 
     END IF
     
-
-
   END DO
 
 
