@@ -1,5 +1,4 @@
 MODULE oneD_module
-USE LAPACK
 USE MPI
 CONTAINS
 
