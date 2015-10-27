@@ -3,7 +3,7 @@ USE MPI
 SUBROUTINE sort(x,indx,N,P,my_rank)
 IMPLICIT NONE
 DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: x,indx,tempx,tempindx
-INTEGER N,P,my_rank,leftover,div,i,j,tempx_size
+INTEGER :: N,P,my_rank,leftover,div,i,j,tempx_size,temp_rank,merge_count
 
 leftover = MOD(N,P)
 div = N - leftover
@@ -31,6 +31,16 @@ END IF
 CALL MergeSort(tempx,tempx_size,tempindx)
 
 !Put it all back together!
+
+
+
+
+
+END DO
+
+
+
+
 
 
 
@@ -137,21 +147,6 @@ WHILE(templ .LE. left_size) DO
 END DO
 
 END SUBROUTINE MergeIt
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
