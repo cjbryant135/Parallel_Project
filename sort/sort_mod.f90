@@ -1,66 +1,87 @@
 MODULE sort_mod
 USE MPI
+CONTAINS
+
 SUBROUTINE sort(x,indx,N,P,my_rank)
 IMPLICIT NONE
 DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: x,indx,tempx,tempindx
-INTEGER :: N,P,my_rank,leftover,div,i,j,tempx_size,temp_rank,merge_count,place
+INTEGER :: N,P,my_rank,leftover,div,i,j,tempx_size,temp_rank,merge_count,place,temp,ierror
 DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: tempx_two, tempindx_two, x_two
 
-leftover = MOD(N,P)
-div = N - leftover
+leftover = MOD(N,P) !computes how many leftover elements will be distributed to remaining cores
+div = N - leftover !number of elements that can be evenly distributed amongst cores
 
-IF(my_rank .EQ. 0) THEN
-  ALLOCATE(x_two(2,N))
-END IF
+!IF(my_rank .EQ. 0) THEN
+!  ALLOCATE(x_two(2,N))
+!END IF
 
-IF(my_rank .GE. leftover) THEN
-  ALLOCATE(tempx(div+1),tempindx(div+1))
-  tempx_size = div+1
+IF(my_rank .GE. 1 .AND. my_rank .LE. leftover) THEN !processors getting extras
+  ALLOCATE(tempx(div/P+1),tempindx(div/P+1))
+  tempx_size = div/P+1
 ELSE
-  ALLOCATE(tempx(div),tempindx(div))
-  tempx_size = div
+  ALLOCATE(tempx(div/P),tempindx(div/P))
+  tempx_size = div/P
 END IF
 
-DO i = 1+my_rank*div, my_rank*div+div
-  DO j = 1, div
+
+j=1
+DO i = 1+my_rank*div/P, my_rank*div/P+div/P
     tempx(j) = x(i)
     tempindx(j) = i
-  END DO
+  j = j + 1
 END DO
 
-IF(my_rank .GE. leftover) THEN
-  tempx(div+1) = x(P*div + my_rank-leftover+1)
-  tempindx(div+1) = P*div + my_rank-leftover+1
+IF(my_rank .LE. leftover .AND. my_rank .GE. 1) THEN
+  temp = 1
+  DO i = N-leftover+1,N
+    IF(my_rank == temp) THEN
+      tempx(tempx_size) = x(i)
+    END IF
+    temp = temp + 1
+  END DO
 END IF
+
+
 
 CALL MergeSort(tempx,tempx_size,tempindx)
 
-ALLOCATE(tempx_two(2,tempx_size),tempindx_two(2,tempx_size))
+
+!CALL MPI_Barrier(MPI_COMM_WORLD, ierror)
+!WRITE(*,*) ''
+!IF(my_rank == 0) THEN
+!  WRITE(*,*) 'The lastslast shit'
+!  DO i = 1, tempx_size
+!    WRITE(*,*) tempx(i)
+!  END DO
+!END IF
+
+
+!ALLOCATE(tempx_two(2,tempx_size),tempindx_two(2,tempx_size))
 
 !Put it all back together!
-DO i = 1,tempx_size
-  tempx_two(1,i) = tempx(i)
-  tempx_two(2,i) = my_rank
-  tempindx_two(1,i) = tempindx(i)
-  tempindx_two(2,i) = my_rank
+!DO i = 1,tempx_size
+!  tempx_two(1,i) = tempx(i)
+!  tempx_two(2,i) = my_rank
+!  tempindx_two(1,i) = tempindx(i)
+!  tempindx_two(2,i) = my_rank
 
-END DO
+!END DO
 
-DO i = 1,N
+!DO i = 1,N
   !!!
-  CALL MPI_Reduce(tempx_two(1:2,i), x_two(1:2,i), 1, 
+  !CALL MPI_Reduce(tempx_two(1:2,i), x_two(1:2,i), 1, 
 
-END DO
-
-
-IF(my_rank .EQ. 0)
-  DEALLOCATE(x_two)
-END IF
+!END DO
 
 
+!IF(my_rank .EQ. 0)
+!  DEALLOCATE(x_two)
+!END IF
 
 
-DEALLOCATE(tempx,tempindx, tempx_two, tempindx_two)
+
+
+DEALLOCATE(tempx,tempindx) !fix this when you put back the _two stuff
 END SUBROUTINE sort
 
 
@@ -69,13 +90,15 @@ IMPLICIT NONE
 DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: tempx, tempindx, left, right, leftindx, rightindx
 INTEGER tempx_size,left_size,right_size, pivot, i
 
+
 IF(tempx_size .LE. 1) THEN 
   RETURN
 END IF
 
-pivot = FLOOR(tempx_size / 2)
 
-IF(MOD(tempx_size,2) .EQ. 0) THEN
+pivot = FLOOR(DBLE(tempx_size / 2))
+
+IF(MOD(tempx_size,2) .EQ. 0) THEN !If even number of elements in tempx
   ALLOCATE(left(pivot),right(pivot),leftindx(pivot),rightindx(pivot))
   left_size = pivot
   right_size = pivot
@@ -92,10 +115,11 @@ DO i = 1,pivot
   rightindx(i) = tempindx(pivot+i)
 END DO
 
-IF(MOD(tempx_size,2) .NE. 0) THEN 
-  right(tempx_size) = tempx(tempx_size)
-  rightindx(tempx_size) = tempindx(tempx_size)
+IF(MOD(tempx_size,2) .NE. 0) THEN !If odd number of elements add last element to right
+  right(tempx_size-pivot) = tempx(tempx_size)
+  rightindx(tempx_size-pivot) = tempindx(tempx_size)
 END IF
+
 
 CALL MergeSort(left,left_size,leftindx)
 CALL MergeSort(right,right_size,rightindx)
@@ -103,19 +127,21 @@ CALL MergeSort(right,right_size,rightindx)
 CALL MergeIt(left,left_size,right,right_size,leftindx,rightindx,tempx,tempindx)
 
 DEALLOCATE(left,right,leftindx,rightindx)
-END RECURSIVE SUBROUTINE MergeSort
+END SUBROUTINE MergeSort
 
 SUBROUTINE MergeIt(left,left_size,right,right_size,leftindx,rightindx,tempx,tempindx)
 IMPLICIT NONE
 DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: tempx, tempindx, left, right, leftindx, rightindx
-INTEGER tempx_size,left_size,right_size, i, templ, tempr, k
+INTEGER :: tempx_size,left_size,right_size, i, templ, tempr, k
+
+
 
 templ = 1
 tempr = 1
 k = 1
 
-WHILE(templ .LE. left_size) DO
-  WHILE(tempr .LE. right_size) DO
+DO WHILE(templ .LE. left_size) 
+  DO WHILE(tempr .LE. right_size) 
     
     IF(left(templ) .GE. right(tempr)) THEN
       
