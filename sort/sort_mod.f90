@@ -3,10 +3,15 @@ USE MPI
 SUBROUTINE sort(x,indx,N,P,my_rank)
 IMPLICIT NONE
 DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: x,indx,tempx,tempindx
-INTEGER :: N,P,my_rank,leftover,div,i,j,tempx_size,temp_rank,merge_count
+INTEGER :: N,P,my_rank,leftover,div,i,j,tempx_size,temp_rank,merge_count,place
+DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: tempx_two, tempindx_two, x_two
 
 leftover = MOD(N,P)
 div = N - leftover
+
+IF(my_rank .EQ. 0) THEN
+  ALLOCATE(x_two(2,N))
+END IF
 
 IF(my_rank .GE. leftover) THEN
   ALLOCATE(tempx(div+1),tempindx(div+1))
@@ -30,22 +35,32 @@ END IF
 
 CALL MergeSort(tempx,tempx_size,tempindx)
 
+ALLOCATE(tempx_two(2,tempx_size),tempindx_two(2,tempx_size))
+
 !Put it all back together!
+DO i = 1,tempx_size
+  tempx_two(1,i) = tempx(i)
+  tempx_two(2,i) = my_rank
+  tempindx_two(1,i) = tempindx(i)
+  tempindx_two(2,i) = my_rank
 
+END DO
 
-
-
+DO i = 1,N
+  !!!
+  CALL MPI_Reduce(tempx_two(1:2,i), x_two(1:2,i), 1, 
 
 END DO
 
 
+IF(my_rank .EQ. 0)
+  DEALLOCATE(x_two)
+END IF
 
 
 
 
-
-
-DEALLOCATE(tempx,tempindx)
+DEALLOCATE(tempx,tempindx, tempx_two, tempindx_two)
 END SUBROUTINE sort
 
 

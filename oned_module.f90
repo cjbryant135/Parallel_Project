@@ -1,5 +1,5 @@
 MODULE oneD_module
-USE MPI
+!USE MPI
 CONTAINS
 
 SUBROUTINE GaussLegendre(x, w, N)
@@ -63,10 +63,10 @@ SUBROUTINE GaussLegendre(x, w, N)
   !  END DO
   !END DO
   !Stores eigenvalues in x
-  !DO i = 1,N
-  !  WRITE(*,*) Lambda(i), V(1:N,i)
+  DO i = 1,N
+    WRITE(*,*)  V(1:N,i)
     
-  !END DO
+  END DO
   
   !NEED TO SORT EIGENVALUES AND TRACK CHANGES IN index
 
@@ -110,7 +110,6 @@ INTEGER :: N,i
 
 
 END SUBROUTINE sort
-
 
 
 
