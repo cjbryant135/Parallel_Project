@@ -5,6 +5,7 @@ CONTAINS
 SUBROUTINE sort(x,indx,N,P,my_rank)
 IMPLICIT NONE
 DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: x,indx,tempx,tempindx
+INTEGER, DIMENSION(MPI_STATUS_SIZE) :: myStatus
 INTEGER :: N,P,my_rank,leftover,div,i,j,tempx_size,temp_rank,merge_count,place,temp,ierror, temp_core
 DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: tempx_two, tempindx_two, x_two, indx_two
 DOUBLE PRECISION, PARAMETER :: big = 10.d0**300
@@ -37,6 +38,7 @@ IF(my_rank .LE. leftover .AND. my_rank .GE. 1) THEN
   DO i = N-leftover+1,N
     IF(my_rank == temp) THEN
       tempx(tempx_size) = x(i)
+      tempindx(tempx_size) = DBLE(i)
     END IF
     temp = temp + 1
   END DO
@@ -47,7 +49,6 @@ END IF
 CALL MergeSort(tempx,tempx_size,tempindx)
 
 
-!CALL MPI_Barrier(MPI_COMM_WORLD, ierror)
 !WRITE(*,*) ''
 !IF(my_rank == 0) THEN
 !  WRITE(*,*) 'The lastslast shit'
@@ -85,10 +86,16 @@ DO i = 1,N
     MPI_COMM_WORLD, ierror)
   
   IF(my_rank == temp_core) THEN
+    !WRITE(*,*) tempindx(place)
+    CALL MPI_SEND(tempindx(place), 1, MPI_DOUBLE_PRECISION, 0, my_rank*10, MPI_COMM_WORLD, ierror)
     place = place + 1
   END IF
   
-  x(i) = x_two(1,i)  
+  IF(my_rank == master) THEN
+     CALL MPI_RECV(indx(i), 1, MPI_DOUBLE_PRECISION, temp_core, temp_core*10, MPI_COMM_WORLD, myStatus, ierror)
+     x(i) = x_two(1,i) 
+  END IF
+   
 
 
 END DO
