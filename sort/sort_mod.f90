@@ -5,15 +5,16 @@ CONTAINS
 SUBROUTINE sort(x,indx,N,P,my_rank)
 IMPLICIT NONE
 DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: x,indx,tempx,tempindx
-INTEGER :: N,P,my_rank,leftover,div,i,j,tempx_size,temp_rank,merge_count,place,temp,ierror
-DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: tempx_two, tempindx_two, x_two
+INTEGER :: N,P,my_rank,leftover,div,i,j,tempx_size,temp_rank,merge_count,place,temp,ierror, temp_core
+DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: tempx_two, tempindx_two, x_two, indx_two
+DOUBLE PRECISION, PARAMETER :: big = 10.d0**300
+INTEGER, PARAMETER :: master = 0
 
 leftover = MOD(N,P) !computes how many leftover elements will be distributed to remaining cores
 div = N - leftover !number of elements that can be evenly distributed amongst cores
 
-!IF(my_rank .EQ. 0) THEN
-!  ALLOCATE(x_two(2,N))
-!END IF
+ALLOCATE(x_two(2,N), indx_two(2,N)) !allocation of recieve arrays for MPI reduce later
+
 
 IF(my_rank .GE. 1 .AND. my_rank .LE. leftover) THEN !processors getting extras
   ALLOCATE(tempx(div/P+1),tempindx(div/P+1))
@@ -56,22 +57,41 @@ CALL MergeSort(tempx,tempx_size,tempindx)
 !END IF
 
 
-!ALLOCATE(tempx_two(2,tempx_size),tempindx_two(2,tempx_size))
-
+ALLOCATE(tempx_two(2,tempx_size+1),tempindx_two(2,tempx_size)) !prepping for call to mpireduce
+!set each core's place
+place = 1
 !Put it all back together!
-!DO i = 1,tempx_size
-!  tempx_two(1,i) = tempx(i)
-!  tempx_two(2,i) = my_rank
-!  tempindx_two(1,i) = tempindx(i)
-!  tempindx_two(2,i) = my_rank
 
-!END DO
+DO i = 1,tempx_size !create tempx_two array
+  tempx_two(1,i) = tempx(i)
+  tempx_two(2,i) = DBLE(my_rank)
+  tempindx_two(1,i) = DBLE(tempindx(i))
+  tempindx_two(2,i) = DBLE(my_rank)
 
-!DO i = 1,N
-  !!!
-  !CALL MPI_Reduce(tempx_two(1:2,i), x_two(1:2,i), 1, 
+END DO
 
-!END DO
+tempx_two(1,tempx_size+1) = big
+tempx_two(2,tempx_size+1) = DBLE(my_rank) !last entry really big
+
+DO i = 1,N
+  
+  CALL MPI_Reduce(tempx_two(1:2, place), x_two(1:2,i), 1, &
+    MPI_2DOUBLE_PRECISION, MPI_MINLOC, master, MPI_COMM_WORLD, ierror)
+  IF(my_rank == master) THEN
+    temp_core = INT(x_two(2,i))
+  END IF
+  
+  CALL MPI_Bcast(temp_core, 1, MPI_INTEGER, master, &
+    MPI_COMM_WORLD, ierror)
+  
+  IF(my_rank == temp_core) THEN
+    place = place + 1
+  END IF
+  
+  x(i) = x_two(1,i)  
+
+
+END DO
 
 
 !IF(my_rank .EQ. 0)
@@ -81,7 +101,7 @@ CALL MergeSort(tempx,tempx_size,tempindx)
 
 
 
-DEALLOCATE(tempx,tempindx) !fix this when you put back the _two stuff
+DEALLOCATE(tempx,tempindx, tempx_two, x_two, tempindx_two, indx_two) !fix this when you put back the _two stuff
 END SUBROUTINE sort
 
 

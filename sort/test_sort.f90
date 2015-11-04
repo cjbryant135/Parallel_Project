@@ -17,14 +17,25 @@ DO i = 1,N
 END DO
 
 IF(my_rank == 0 ) THEN
-WRITE(*,*) 'before sorting:'
-DO i = 1,N
-  WRITE(*,*) x(i)
-END DO
-WRITE(*,*)
+  WRITE(*,*) 'before sorting:'
+  DO i = 1,N
+    WRITE(*,*) x(i)
+  END DO
+  WRITE(*,*) ''
 END IF
 
 CALL sort(x,indx,N,P,my_rank)
+
+
+IF(my_rank == 0 ) THEN !something aint right here
+    WRITE(*,*) 'After sorting: '
+  DO i = 1,N
+    WRITE(*,*) x(i)
+  END DO
+  WRITE(*,*)
+END IF
+
+
 
 DEALLOCATE(x,indx)
 
