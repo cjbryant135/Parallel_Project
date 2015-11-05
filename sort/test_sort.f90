@@ -26,6 +26,7 @@ END IF
 
 CALL sort(x,indx,N,P,my_rank)
 
+CALL MPI_Barrier(MPI_COMM_WORLD, ierror)
 
 IF(my_rank == 0 ) THEN !something aint right here
     WRITE(*,*) 'After sorting: '
