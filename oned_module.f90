@@ -1,16 +1,18 @@
 MODULE oneD_module
-!USE MPI
+USE MPI
+USE sort_mod
 CONTAINS
 
 SUBROUTINE GaussLegendre(x, w, N)
   IMPLICIT NONE
-  DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: D,x,w,beta,Lambda,Work
+  DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: D,x,w,beta,Lambda,Work,indx
   INTEGER :: N,i,j,Lwork,Info,num_eig,Liwork
   DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: V, T, Eye
   DOUBLE PRECISION :: abs_tol
   INTEGER, ALLOCATABLE, DIMENSION(:) :: Isuppz,Iwork
-  !BEGIN PROGRAM HERE
-  ALLOCATE(beta(N))
+ 
+ !BEGIN PROGRAM HERE
+  ALLOCATE(beta(N), x(N))
   ALLOCATE(T(N,N))
   T(1:N,1:N) = 0
   !TEST
@@ -55,7 +57,11 @@ SUBROUTINE GaussLegendre(x, w, N)
   CALL DSTEGR('V','A',N, D, beta,0.d0,0.d0,0,0,abs_tol,num_eig,Lambda,V,N,Isuppz,Work,Lwork,Iwork,&
     Liwork,Info) !WORKING!
 
-
+  !
+  !
+  DO i = 1, N
+    x(i) = Lambda(i) !put eigenvalues into x
+  END DO  
   !TEST STUFF
   !DO i = 1, N
   !  DO j=1,N
@@ -63,13 +69,13 @@ SUBROUTINE GaussLegendre(x, w, N)
   !  END DO
   !END DO
   !Stores eigenvalues in x
-  DO i = 1,N
-    WRITE(*,*)  V(1:N,i)
+  !DO i = 1,N
+  !  WRITE(*,*)  V(1:N,i)
     
-  END DO
+  !END DO
   
   !NEED TO SORT EIGENVALUES AND TRACK CHANGES IN index
-
+  
 
 
 
@@ -94,42 +100,6 @@ SUBROUTINE GaussLegendre(x, w, N)
 
 
 END SUBROUTINE GaussLegendre
-
-
-SUBROUTINE sort(x,indx,N)
-IMPLICIT NONE
-INTEGER, ALLOCATABLE, DIMENSION(:) :: indx  
-DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: x
-INTEGER :: N,i
-
-
-
-
-
-
-
-
-END SUBROUTINE sort
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
