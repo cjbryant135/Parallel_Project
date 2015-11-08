@@ -1,6 +1,7 @@
 MODULE oneD_module
 USE MPI
 USE sort_mod
+USE oned_parameters
 CONTAINS
 
 SUBROUTINE GaussLegendre(x, w, N, my_rank, P)
@@ -74,9 +75,7 @@ END DO
 
 CALL sort(x, indx, N, P, my_rank)
 
-IF(my_rank .NE. 0) THEN
-   DEALLOCATE(x, indx)
-ELSE
+IF(my_rank == 0) THEN
    DO i = 1, N
       Lambda(i) = x(i)
       w(i) = DBLE(2)*V(1,INT(indx(i)))**2
@@ -123,6 +122,132 @@ END IF
 
 
 END SUBROUTINE GaussLegendre
+
+
+SUBROUTINE RTE_oneD(N, my_rank, P)
+!x w N my_rank P
+IMPLICIT NONE
+INTEGER :: P, my_rank, N, i, j, LWORK, Info, ierror
+INTEGER, PARAMETER :: master = 0
+DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: x, w, lambda_num, lambda_de, alphai, Work, lambda, evals, indx, cond, ab
+DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: B, HH, A, eye, VL, VR, V, cutV, U, Uplus, Uminus, Vplus, Vminus, block, Psi
+
+ALLOCATE(x(N), w(N), lambda(N), indx(N))
+CALL GaussLegendre(x, w, N, my_rank, P)
+
+IF(my_rank == master) THEN
+  ALLOCATE(B(N,N), HH(N,N), A(N,N), eye(N,N))
+  LWORK = MAX(1,8*N)+1
+  ALLOCATE(Work(LWORK))
+  ALLOCATE(lambda_num(N), lambda_de(N), alphai(N))
+  ALLOCATE(VL(N,N), VR(N,N))
+  DO i = 1, N
+    B(i,i) = x(i)
+    eye(i,i) = 1.d0
+    DO j = 1,N
+      HH(i,j) = h(x(i),x(j))*w(j)
+    END DO
+  END DO
+  
+  A(:,:) = -(eye(:,:)-albedo()*HH(:,:))
+  CALL DGEGV('N', 'V', N, A, N, B, N, lambda_num, alphai, lambda_de, VL, N, VR, N, Work, LWORK, Info) 
+  lambda(:) = lambda_num(:) / lambda_de(:)
+  DEALLOCATE(Work, VL, alphai, A, B, HH, eye, lambda_num, lambda_de)
+  
+ELSE
+  DEALLOCATE(x,w)
+END IF
+
+CALL MPI_Bcast(lambda, N, MPI_DOUBLE_PRECISION, master, MPI_COMM_WORLD, ierror) !everyone has lambda
+
+DO i = 1, N
+  indx(i) = DBLE(i) !create indx vector
+END DO
+
+
+CALL sort(lambda, indx, N, P, my_rank) !eigenvalues sorted and changes tracked in indx
+IF(my_rank == master) THEN
+  ALLOCATE(evals(N/2))
+  evals(:) = lambda(N/2+1:N) !store only positive eigenvalues
+  DEALLOCATE(lambda)
+  ALLOCATE(V(N,N))
+  DO i = 1, N
+    V(1:N,i) = VR(1:N,INT(indx(i)))
+  END DO
+  DEALLOCATE(VR)
+  ALLOCATE(cutV(N,N/2), U(N,N/2))
+  cutV = V(:,N/2+1:N)
+  DEALLOCATE(V)
+
+  CALL flipud(cutV, U, N)
+  
+  ALLOCATE(Uplus(N/2,N/2), Uminus(N/2,N/2), Vplus(N/2,N/2), Vminus(N/2,N/2))
+  !Construct blocks to put into block matrix
+  Uminus = U(1:N/2,:)
+  Uplus = U(N/2+1:N,:)
+
+  Vplus = cutV(N/2+1:N,:)
+  Vminus = cutV(1:N/2,:)
+  
+  DEALLOCATE(U, cutV)
+
+  ALLOCATE(block(N,N))
+  !set the diagonal blocks of block
+  block(1:N/2, 1:N/2) = Uplus(:,:)
+  block(N/2+1:N, N/2+1:N) = Uminus(:,:)
+  
+  !set psi up
+  ALLOCATE(Psi(N/2, N/2)) 
+  Psi(:,:) = 0
+  DO i = 1, N/2
+    Psi(i,i) = EXP(-evals(i)*taufinal())
+  END DO
+  
+  block(1:N/2,N/2+1:N) = MATMUL(Vplus, Psi) 
+  block(N/2+1:N, 1:N/2) = MATMUL(Uminus,Psi)
+  DEALLOCATE(Uplus, Uminus, Vplus, Vminus, Psi)
+  ALLOCATE(cond(N))
+  cond(1:N/2) = alpha(x(N/2+1:N), N/2)
+  cond(N/2+1:N) = beta(x(1:N/2), N/2)
+  
+  !NOW SOLVE THAT SYSTEM 
+  
+
+
+
+  DEALLOCATE(block, cond, x, w)
+
+
+ELSE 
+  DEALLOCATE(lambda, indx)
+END IF
+
+
+
+
+
+
+
+END SUBROUTINE RTE_oneD
+
+
+SUBROUTINE flipud(cutV, U, N)
+IMPLICIT NONE
+DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: cutV, U
+INTEGER :: i, N
+
+DO i = 1, N
+  U(i,:) = cutV(N-i+1,:)
+END DO
+
+END SUBROUTINE
+
+
+
+
+
+
+
 
 
 
