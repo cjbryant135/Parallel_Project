@@ -124,13 +124,16 @@ END IF
 END SUBROUTINE GaussLegendre
 
 
-SUBROUTINE RTE_oneD(N, my_rank, P)
+SUBROUTINE RTE_oneD(N, my_rank, P, Intensity) !We assume intensity is already allocated, size N
 !x w N my_rank P
 IMPLICIT NONE
 INTEGER :: P, my_rank, N, i, j, LWORK, Info, ierror
 INTEGER, PARAMETER :: master = 0
-DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: x, w, lambda_num, lambda_de, alphai, Work, lambda, evals, indx, cond, ab
+DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: x, w, lambda_num, lambda_de, alphai, Work, &
+  lambda, evals, indx, cond, ab, Intensity
 DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: B, HH, A, eye, VL, VR, V, cutV, U, Uplus, Uminus, Vplus, Vminus, block, Psi
+INTEGER, ALLOCATABLE, DIMENSION(:) :: IPIV
+
 
 ALLOCATE(x(N), w(N), lambda(N), indx(N))
 CALL GaussLegendre(x, w, N, my_rank, P)
@@ -189,7 +192,6 @@ IF(my_rank == master) THEN
   Vplus = cutV(N/2+1:N,:)
   Vminus = cutV(1:N/2,:)
   
-  DEALLOCATE(U, cutV)
 
   ALLOCATE(block(N,N))
   !set the diagonal blocks of block
@@ -211,11 +213,20 @@ IF(my_rank == master) THEN
   cond(N/2+1:N) = beta(x(1:N/2), N/2)
   
   !NOW SOLVE THAT SYSTEM 
+  ALLOCATE(IPIV(N))
+  CALL DGESV(N, 1, block, N, IPIV, cond, N, Info)
+  ALLOCATE(ab(N))
+  ab = cond
+ 
+  DEALLOCATE(block, cond, x, w, IPIV)
   
+  Intensity(:) = 0.d0
 
-
-
-  DEALLOCATE(block, cond, x, w)
+  DO i = 1, N/2
+    Intensity(:) = Intensity(:) + U(:,i)*EXP(-evals(i)*tau())*ab(i) + &
+      cutV(:,i)*EXP(evals(i)*(tau() - taufinal() ))*ab(N/2+i)
+  END DO
+  
 
 
 ELSE 

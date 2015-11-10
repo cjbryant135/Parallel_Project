@@ -3,7 +3,8 @@ USE MPI
 USE oned_module
 
 IMPLICIT NONE
-INTEGER :: ierror, P, my_rank, N
+INTEGER :: ierror, P, my_rank, N, i
+DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: Intensity
 INTEGER, PARAMETER :: master = 0
 
 CALL MPI_Init(ierror)
@@ -17,10 +18,18 @@ END IF
 
 CALL MPI_Bcast(N, 1, MPI_INTEGER, master, MPI_COMM_WORLD, ierror)
 
-CALL RTE_oneD(N, my_rank, P)
+ALLOCATE(Intensity(N))
 
+CALL RTE_oneD(N, my_rank, P, Intensity)
 
+!test code
+IF(my_rank == master) THEN
+  DO i = 1, N
+    WRITE(*,*) Intensity(i)
+  END DO
+END IF
 
+DEALLOCATE(Intensity)
 CALL MPI_Finalize(ierror)
 
 END PROGRAm oned_main
