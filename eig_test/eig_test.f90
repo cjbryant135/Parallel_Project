@@ -20,7 +20,7 @@ B(:,:) = 0
 
 DO i = 1, N
   DO j = 1, N
-    A(i,j) = COS(DBLE(i*j))
+    A(i,j) = DBLE(i)**2+3d0*DBLE(j)+DBLE(i)**j
   END DO
   !A(i,i) = 1
   IF(i .LE. N/2) THEN
@@ -37,8 +37,8 @@ END DO
 CALL DGEGV('N', 'V', N, A, N, B, N, alphar, alphai, beta, VL, N, VR, N, Work, LWORK, Info)   
 
 DO i = 1,N
-  !WRITE(*,*) VR(i,1), VR(i,2), VR(i,3), VR(i,4)
-  WRITE(*,*) alphar(i), beta(i)
+  WRITE(*,*) VR(i,1), VR(i,2), VR(i,3), VR(i,4)
+  !WRITE(*,*) alphar(i)/beta(i)
 END DO
 
 

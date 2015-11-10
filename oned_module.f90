@@ -140,6 +140,7 @@ CALL GaussLegendre(x, w, N, my_rank, P)
 
 IF(my_rank == master) THEN
   ALLOCATE(B(N,N), HH(N,N), A(N,N), eye(N,N))
+  B(:,:) = 0
   LWORK = MAX(1,8*N)+1
   ALLOCATE(Work(LWORK))
   ALLOCATE(lambda_num(N), lambda_de(N), alphai(N))
@@ -152,9 +153,18 @@ IF(my_rank == master) THEN
     END DO
   END DO
   
+  !DO i = 1, N
+  !   DO j = 1, N
+  !      WRITE(*,*) B(i,j)
+  !   END DO
+  !END DO
+  
   A(:,:) = -(eye(:,:)-albedo()*HH(:,:))
+ 
+
   CALL DGEGV('N', 'V', N, A, N, B, N, lambda_num, alphai, lambda_de, VL, N, VR, N, Work, LWORK, Info) 
   lambda(:) = lambda_num(:) / lambda_de(:)
+  !WRITE(*,*) lambda
   DEALLOCATE(Work, VL, alphai, A, B, HH, eye, lambda_num, lambda_de)
   
 ELSE
@@ -170,6 +180,7 @@ END DO
 
 CALL sort(lambda, indx, N, P, my_rank) !eigenvalues sorted and changes tracked in indx
 IF(my_rank == master) THEN
+  !WRITE(*,*) indx
   ALLOCATE(evals(N/2))
   evals(:) = lambda(N/2+1:N) !store only positive eigenvalues
   DEALLOCATE(lambda)
@@ -177,13 +188,27 @@ IF(my_rank == master) THEN
   DO i = 1, N
     V(1:N,i) = VR(1:N,INT(indx(i)))
   END DO
+
+  !WRITE(*,*) "V"
+  !DO i = 1, N
+  !   DO j = 1, N
+  !      WRITE(*,*) V(i,j)
+  !   END DO
+  !END DO
+
   DEALLOCATE(VR)
   ALLOCATE(cutV(N,N/2), U(N,N/2))
   cutV = V(:,N/2+1:N)
   DEALLOCATE(V)
 
   CALL flipud(cutV, U, N)
-  
+  !DO i = 1, N
+  !   DO J = 1, N/2
+  !      WRITE(*,*) U(i,j)
+  !   END DO
+  !END DO
+  !WRITE(*,*) ""
+
   ALLOCATE(Uplus(N/2,N/2), Uminus(N/2,N/2), Vplus(N/2,N/2), Vminus(N/2,N/2))
   !Construct blocks to put into block matrix
   Uminus = U(1:N/2,:)
@@ -196,7 +221,7 @@ IF(my_rank == master) THEN
   ALLOCATE(block(N,N))
   !set the diagonal blocks of block
   block(1:N/2, 1:N/2) = Uplus(:,:)
-  block(N/2+1:N, N/2+1:N) = Uminus(:,:)
+  block(N/2+1:N, N/2+1:N) = Vminus(:,:)
   
   !set psi up
   ALLOCATE(Psi(N/2, N/2)) 
@@ -207,16 +232,30 @@ IF(my_rank == master) THEN
   
   block(1:N/2,N/2+1:N) = MATMUL(Vplus, Psi) 
   block(N/2+1:N, 1:N/2) = MATMUL(Uminus,Psi)
+
+  !DO i = 1, N
+  !   DO j = 1, N
+  !      WRITE(*,*) block(i,j)
+  !   END DO
+  !END DO
+  
   DEALLOCATE(Uplus, Uminus, Vplus, Vminus, Psi)
   ALLOCATE(cond(N))
   cond(1:N/2) = alpha(x(N/2+1:N), N/2)
   cond(N/2+1:N) = beta(x(1:N/2), N/2)
+  
+
   
   !NOW SOLVE THAT SYSTEM 
   ALLOCATE(IPIV(N))
   CALL DGESV(N, 1, block, N, IPIV, cond, N, Info)
   ALLOCATE(ab(N))
   ab = cond
+
+  !DO i = 1, N
+  !   WRITE(*,*) cond(i)
+  !END DO
+  WRITE(*,*) ""
  
   DEALLOCATE(block, cond, x, w, IPIV)
   
@@ -232,9 +271,6 @@ IF(my_rank == master) THEN
 ELSE 
   DEALLOCATE(lambda, indx)
 END IF
-
-
-
 
 
 
