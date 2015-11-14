@@ -124,66 +124,84 @@ END IF
 END SUBROUTINE GaussLegendre
 
 
-SUBROUTINE RTE_oneD(N, my_rank, P, Intensity) !We assume intensity is already allocated, size N
+SUBROUTINE eig_solve(x, w, N, lambda, VR) !We assume intensity is already allocated, size N
 !x w N my_rank P
 IMPLICIT NONE
-INTEGER :: P, my_rank, N, i, j, LWORK, Info, ierror
-INTEGER, PARAMETER :: master = 0
+INTEGER :: N, i, j, LWORK, Info, ierror
+!INTEGER, PARAMETER :: master = 0
 DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: x, w, lambda_num, lambda_de, alphai, Work, &
   lambda, evals, indx, cond, ab, Intensity
-DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: B, HH, A, eye, VL, VR, V, cutV, U, Uplus, Uminus, Vplus, Vminus, block, Psi
-INTEGER, ALLOCATABLE, DIMENSION(:) :: IPIV
+DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: B, HH, A, eye, VL, VR
+DOUBLE PRECISION, DIMENSION(2) :: times, subtimes
 
 
-ALLOCATE(x(N), w(N), lambda(N), indx(N))
-CALL GaussLegendre(x, w, N, my_rank, P)
+  
 
-IF(my_rank == master) THEN
   ALLOCATE(B(N,N), HH(N,N), A(N,N), eye(N,N))
   B(:,:) = 0
   LWORK = MAX(1,8*N)+1
   ALLOCATE(Work(LWORK))
   ALLOCATE(lambda_num(N), lambda_de(N), alphai(N))
-  ALLOCATE(VL(N,N), VR(N,N))
+  ALLOCATE(VL(N,N))
+
+  !WRITE(*,*) 'H matrix'
+  eye(:,:) = 0
   DO i = 1, N
     B(i,i) = x(i)
     eye(i,i) = 1.d0
     DO j = 1,N
       HH(i,j) = h(x(i),x(j))*w(j)
+     !WRITE(*,*) HH(i,j)
     END DO
   END DO
-  
+  !WRITE(*,*) '------------------------'
+  !WRITE(*,*) 'B matrix'
   !DO i = 1, N
   !   DO j = 1, N
   !      WRITE(*,*) B(i,j)
   !   END DO
   !END DO
-  
+  !WRITE(*,*) '------------------------------'
+  !WRITE(*,*) 'A matrix'
   A(:,:) = -(eye(:,:)-albedo()*HH(:,:))
- 
 
+  
+  !DO i = 1, N
+  !   DO j = 1, N
+  !      WRITE(*,*) A(i,j)
+  !   END DO
+  !END DO
+  !WRITE(*,*) '' 
+   
+  !subtimes(1) = ()
+  CALL CPU_TIME(subtimes(1))
   CALL DGEGV('N', 'V', N, A, N, B, N, lambda_num, alphai, lambda_de, VL, N, VR, N, Work, LWORK, Info) 
+  CALL CPU_TIME(subtimes(2))
+  !subtimes(2) = MPI_Wtime()
+  WRITE(*,*) ' -Eigenvalue solver time', subtimes(2)-subtimes(1)
+
+  
   lambda(:) = lambda_num(:) / lambda_de(:)
+  !WRITE(*,*) ''
+  !WRITE(*,*) 'lambda'
   !WRITE(*,*) lambda
   DEALLOCATE(Work, VL, alphai, A, B, HH, eye, lambda_num, lambda_de)
+
+END SUBROUTINE eig_solve
   
-ELSE
-  DEALLOCATE(x,w)
-END IF
 
-CALL MPI_Bcast(lambda, N, MPI_DOUBLE_PRECISION, master, MPI_COMM_WORLD, ierror) !everyone has lambda
+SUBROUTINE get_Intensity(lambda, VR, indx, x, w, N, Intensity)
+  IMPLICIT NONE
+  INTEGER :: i, j, N, Info
+  INTEGER, ALLOCATABLE, DIMENSION(:) :: IPIV
+  DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: lambda, Intensity, indx, evals, ab, cond, x, w
+  DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: VR, V, block, U, cutV, Psi, Uplus, Uminus, Vplus, Vminus
 
-DO i = 1, N
-  indx(i) = DBLE(i) !create indx vector
-END DO
-
-
-CALL sort(lambda, indx, N, P, my_rank) !eigenvalues sorted and changes tracked in indx
-IF(my_rank == master) THEN
   !WRITE(*,*) indx
+
+
   ALLOCATE(evals(N/2))
   evals(:) = lambda(N/2+1:N) !store only positive eigenvalues
-  DEALLOCATE(lambda)
   ALLOCATE(V(N,N))
   DO i = 1, N
     V(1:N,i) = VR(1:N,INT(indx(i)))
@@ -196,7 +214,6 @@ IF(my_rank == master) THEN
   !   END DO
   !END DO
 
-  DEALLOCATE(VR)
   ALLOCATE(cutV(N,N/2), U(N,N/2))
   cutV = V(:,N/2+1:N)
   DEALLOCATE(V)
@@ -251,13 +268,9 @@ IF(my_rank == master) THEN
   CALL DGESV(N, 1, block, N, IPIV, cond, N, Info)
   ALLOCATE(ab(N))
   ab = cond
-
-  !DO i = 1, N
-  !   WRITE(*,*) cond(i)
-  !END DO
-  WRITE(*,*) ""
+  
  
-  DEALLOCATE(block, cond, x, w, IPIV)
+  DEALLOCATE(block, cond, IPIV)
   
   Intensity(:) = 0.d0
 
@@ -266,16 +279,9 @@ IF(my_rank == master) THEN
       cutV(:,i)*EXP(evals(i)*(tau() - taufinal() ))*ab(N/2+i)
   END DO
   
+  DEALLOCATE(ab, evals)
 
-
-ELSE 
-  DEALLOCATE(lambda, indx)
-END IF
-
-
-
-
-END SUBROUTINE RTE_oneD
+END SUBROUTINE get_Intensity
 
 
 SUBROUTINE flipud(cutV, U, N)
@@ -287,14 +293,7 @@ DO i = 1, N
   U(i,:) = cutV(N-i+1,:)
 END DO
 
-END SUBROUTINE
-
-
-
-
-
-
-
+END SUBROUTINE flipud
 
 
 
