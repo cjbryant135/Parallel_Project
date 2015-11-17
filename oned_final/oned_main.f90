@@ -32,7 +32,6 @@ CALL GaussLegendre(x, w, N, my_rank, P)
 IF(my_rank == master) THEN
   ALLOCATE(VR(N,N))
   CALL eig_solve(x, w, N, lambda, VR)
-
 END IF
 
 CALL MPI_Bcast(lambda, N, MPI_DOUBLE_PRECISION, master, &

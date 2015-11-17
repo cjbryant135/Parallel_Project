@@ -127,15 +127,12 @@ END SUBROUTINE GaussLegendre
 SUBROUTINE eig_solve(x, w, N, lambda, VR) !We assume intensity is already allocated, size N
 !x w N my_rank P
 IMPLICIT NONE
-INTEGER :: N, i, j, LWORK, Info, ierror
+INTEGER :: N, i, j, LWORK, INFO, ierror
 !INTEGER, PARAMETER :: master = 0
-DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: x, w, lambda_num, lambda_de, alphai, Work, &
-  lambda, evals, indx, cond, ab, Intensity
-DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: B, HH, A, eye, VL, VR
+DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: x, w, lambda_num, lambda_de, alphai, WORK, &
+  lambda, evals, indx, cond, ab, Intensity, WR, WI
+DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: B, HH, A, eye, VL, VR, Binv, BinvA, tempA, tempB
 DOUBLE PRECISION, DIMENSION(2) :: times, subtimes
-
-
-  
 
   ALLOCATE(B(N,N), HH(N,N), A(N,N), eye(N,N))
   B(:,:) = 0
@@ -164,7 +161,7 @@ DOUBLE PRECISION, DIMENSION(2) :: times, subtimes
   !WRITE(*,*) '------------------------------'
   !WRITE(*,*) 'A matrix'
   A(:,:) = -(eye(:,:)-albedo()*HH(:,:))
-
+  
   
   !DO i = 1, N
   !   DO j = 1, N
@@ -174,19 +171,39 @@ DOUBLE PRECISION, DIMENSION(2) :: times, subtimes
   !WRITE(*,*) '' 
    
   !subtimes(1) = ()
+  ALLOCATE(tempA(N,N), tempB(N,N))
+  tempA = A
+  tempB = B
   CALL CPU_TIME(subtimes(1))
-  CALL DGEGV('N', 'V', N, A, N, B, N, lambda_num, alphai, lambda_de, VL, N, VR, N, Work, LWORK, Info) 
+  CALL DGEGV('N', 'V', N, tempA, N, tempB, N, lambda_num, alphai, lambda_de, VL, N, VR, N, WORK, LWORK, INFO) 
   CALL CPU_TIME(subtimes(2))
   !subtimes(2) = MPI_Wtime()
   WRITE(*,*) ' -Eigenvalue solver time', subtimes(2)-subtimes(1)
 
-  
   lambda(:) = lambda_num(:) / lambda_de(:)
   !WRITE(*,*) ''
   !WRITE(*,*) 'lambda'
   !WRITE(*,*) lambda
-  DEALLOCATE(Work, VL, alphai, A, B, HH, eye, lambda_num, lambda_de)
+  
+  !TRY A NON GENERALIZED EIGENVALUE PROBLEM!
+  ALLOCATE(Binv(N,N), BinvA(N,N), WR(N), WI(N))
+  
+  Binv(:,:) = 0
+  BinvA(:,:) = 0
 
+  CALL diagInverse(B,Binv,N)
+  BinvA = MATMUL(Binv,A)
+
+  CALL CPU_TIME(subtimes(1))
+  CALL DGEEV('N', 'V', N, BinvA, N, WR, WI, VL, N, VR, N, WORK, LWORK, INFO)
+  CALL CPU_TIME(subtimes(2))
+
+  !WRITE(*,*) 'lambda2'
+  !WRITE(*,*) WR
+  WRITE(*,*) ' -Eigenvalue solver time2', subtimes(2)-subtimes(1)
+  !FINISHED TRYING NON GENERALIZED EIGENVALUE PROBLEM!
+  DEALLOCATE(Work, VL, alphai, A, B, HH, eye, lambda_num, lambda_de)
+  
 END SUBROUTINE eig_solve
   
 
@@ -285,15 +302,29 @@ END SUBROUTINE get_Intensity
 
 
 SUBROUTINE flipud(cutV, U, N)
-IMPLICIT NONE
-DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: cutV, U
-INTEGER :: i, N
+  IMPLICIT NONE
+  DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: cutV, U
+  INTEGER :: i, N
 
-DO i = 1, N
-  U(i,:) = cutV(N-i+1,:)
-END DO
+  DO i = 1, N
+     U(i,:) = cutV(N-i+1,:)
+  END DO
 
 END SUBROUTINE flipud
+
+
+
+SUBROUTINE diagInverse(B, Binv, N)
+  IMPLICIT NONE
+  INTEGER :: N, i
+  DOUBLE PRECISION, DIMENSION (N,N) :: B, Binv
+
+  DO i = 1, N
+     Binv(i,i) = DBLE(1)/DBLE(B(i,i))
+  END DO
+
+END SUBROUTINE 
+
 
 
 
