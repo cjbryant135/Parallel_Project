@@ -5,7 +5,7 @@ IMPLICIT NONE
 
 DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: k, mu, phi, w
 DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: my_PP, my_eye, my_Mu, my_Phi
-INTEGER :: N, P, P2, my_rank, my_rank2, i, j, left_over, new_comm, color_id, div, k1_size, &
+INTEGER :: N, P, P2, my_rank, my_rank2, i, j, l, left_over, new_comm, color_id, div, k1_size, &
   master, ierror, fail, low, high, N_mu, N_phi, my_r, left_PP, div_PP
 DOUBLE PRECISION :: pi, x_max, y_max, dk, eta, k1, k2
 
@@ -19,8 +19,8 @@ N = 100
 pi = 3.141592653589793d0
 dk = pi/x_max
 master = 0
-N_mu = 16
-N_phi = 8
+N_mu = 6
+N_phi = 4
 
 
 !P MUST BE PERFECT SQUARE, CHECK THIS CONDITION, NOTE ALSO N > SQRT(P)!
@@ -63,10 +63,15 @@ CALL MPI_BCAST(w, N_mu, MPI_DOUBLE_PRECISION, master, MPI_COMM_WORLD, ierror)
 
 CALL MPI_BCAST(phi, N_phi, MPI_DOUBLE_PRECISION, master, MPI_COMM_WORLD, ierror)
 
-left_PP = MOD(N_mu*N_phi, P)
-div_PP = (N_mu*N_phi-left_PP)/P
+color_id = MOD(my_rank, INT(eta))
+CALL MPI_COMM_SPLIT(MPI_COMM_WORLD, color_id, my_rank, new_comm, ierror)
+CALL MPI_COMM_SIZE(new_comm, P2, ierror)
+CALL MPI_COMM_RANK(new_comm, my_rank2, ierror)
 
-IF(my_rank .GE. P-left_PP) THEN !IF you're getting extra
+left_PP = MOD(N_mu*N_phi, P2)
+div_PP = (N_mu*N_phi-left_PP)/P2
+
+IF(my_rank2 .GE. P2-left_PP) THEN !IF you're getting extra
   my_r = div_PP + 1
 ELSE
   my_r = div_PP
@@ -75,10 +80,95 @@ END IF
 ALLOCATE(my_PP(my_r*N_phi, N_mu*N_phi), my_eye(my_r*N_phi, N_mu*N_phi), &
   my_Phi(my_r*N_phi, N_mu*N_phi), my_Mu(my_r*N_phi, N_mu*N_phi))
 
-my_PP(:,:) = 0.d0
+!TEST CODE
+!WRITE(*,*) 'My rank is:', my_rank, ' my_r is ', my_r
+!WRITE(*,*) ''
+!GETTING CORRECT my_r values
+!IF(my_rank == master) THEN
+!  WRITE(*,*) 'div_PP = ', div_PP 
+!  WRITE(*,*) ''
+!END IF
+!GETTING CORRECT div_P(:,:) = 0.d0
 my_eye(:,:) = 0.d0
 my_Phi(:,:) = 0.d0
 my_Mu(:,:) = 0.d0
+
+DO i = 1, my_r !Create my matrices
+  !MU CONSTRUCTION IS WORKING 
+  IF(my_r == div_PP) THEN
+    my_Mu(i,my_rank2*div_PP+i) = mu(INT(CEILING(DBLE(my_rank2*div_PP+i)/DBLE(N_phi))))
+  ELSE 
+    my_Mu(i,my_rank2*div_PP+i+(my_rank2-(P2-left_PP))) = & 
+      mu(INT(CEILING(DBLE(my_rank2*div_PP+i+(my_rank2-(P2-left_PP)))/DBLE(N_phi))))
+  END IF
+  
+  !PHI CONSTRUCTION
+  IF(my_r == div_PP) THEN
+    my_Phi(i,my_rank2*div_PP+i) = phi(MOD(my_rank2*div_PP+i-1, N_phi)+1)
+  ELSE
+    my_Phi(i,my_rank2*div_PP+i+(my_rank2-(P2-left_PP))) = &
+      phi(MOD(my_rank2*div_PP+i+(my_rank2-(P2-left_PP))-1, N_phi)+1)
+  END IF
+
+  !IDENTITY CONSTRUCTION
+  IF(my_r == div_PP) THEN
+    my_eye(i, my_rank2*div_PP+i) = 1.d0
+  ELSE 
+    my_eye(i, my_rank2*div_PP+i+(my_rank2-(P2-left_PP))) = 1.d0
+  END IF
+
+  !P construction :( 
+END DO
+
+!IF(my_rank == 1) THEN
+!  WRITE(*,*) 'for core 1, my_Mu(1,7) = ', my_Mu(1,7)
+!END IF
+
+
+
+!Test code for my_Mui
+!DO i = 0, P-1 
+!  CALL MPI_Barrier(MPI_COMM_WORLD, ierror)
+!  IF(my_rank == master .AND. i == 0) THEN
+!    WRITE(*,*) ''
+!    WRITE(*,*) 'Mu is: '
+!    WRITE(*,*) 'Phi is: '
+!    DO j = 1, N_phi
+!      WRITE(*,*) mu(j)
+!       WRITE(*,*) phi(j)
+!    END DO
+!    WRITE(*,*) ''
+!  END IF
+!  IF(my_rank == i) THEN
+!    WRITE(*,*) 'I am core: ', my_rank
+!    DO j = 1, my_r
+!      IF(my_r == div_PP) THEN
+!        WRITE(*,*) my_Phi(j, my_rank*div_PP+j)
+!      ELSE
+!        WRITE(*,*) my_Phi(j, my_rank*div_PP+j+(my_rank-(P-left_PP)))
+!      END IF
+!    END DO
+!    WRITE(*,*) ''
+!  END IF
+!END DO
+
+!DO i = 0, P-1 
+!  CALL MPI_Barrier(MPI_COMM_WORLD, ierror)
+!  IF(my_rank == i) THEN
+!    WRITE(*,*) 'I am: ', my_rank
+!    WRITE(*,*) '------------------------------------------------------------------------'
+!    DO j = 1, my_r
+!      WRITE(*,*) my_Mu(j,:)
+!      WRITE(*,*) ''
+!    END DO
+!    WRITE(*,*) '------------------------------------------------------------------------'
+!  END IF
+!END DO
+
+
+
+
+
 
 
 
@@ -93,10 +183,6 @@ my_Mu(:,:) = 0.d0
 !SHIT WITH K below here
 CALL MPI_BCAST(k, N, MPI_DOUBLE_PRECISION, master, MPI_COMM_WORLD, ierror)
 
-color_id = MOD(my_rank, INT(eta))
-CALL MPI_COMM_SPLIT(MPI_COMM_WORLD, color_id, my_rank, new_comm, ierror)
-CALL MPI_COMM_SIZE(new_comm, P2, ierror)
-CALL MPI_COMM_RANK(new_comm, my_rank2, ierror)
 
 
 !Communicator is split yo
