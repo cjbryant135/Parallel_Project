@@ -1,5 +1,6 @@
 MODULE threed_mod
 USE sort_mod
+USE threed_parameters
 CONTAINS
 
 
@@ -102,7 +103,21 @@ END IF
 
 END SUBROUTINE GaussLegendre
 
+SUBROUTINE PP_entry(row_PP, col_PP, mu, phi, w, my_PP, my_PP_row)
+IMPLICIT NONE
+INTEGER :: row_PP, col_PP, a, b, x, y, my_PP_row
+DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: mu, phi, w
+DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) :: my_PP
 
+a = INT(CEILING(DBLE(row_PP)/DBLE(N_phi())))
+b = INT(CEILING(DBLE(col_PP)/DBLE(N_phi()))) !calculates which block the entry is in
+
+x = MOD(row_PP-1, N_phi()) + 1
+y = MOD(col_PP-1, N_phi()) + 1 !check this
+
+my_PP(my_PP_row, col_PP) = phase( mu(a), phi(x), mu(b), phi(y) ) * w(b) 
+
+END SUBROUTINE PP_entry
 
 
 
